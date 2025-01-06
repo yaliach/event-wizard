@@ -31,7 +31,7 @@ cd event-wizard
 pip install -r requirements.txt
 ```
 
-3. Download EvtxECmd.exe from [Eric Zimmerman's Tools](https://ericzimmerman.github.io/#!index.md) and place it in the project directory
+3. Download EvtxECmd.exe from [Eric Zimmerman's Tools](https://ericzimmerman.github.io/#!index.md) and place it in the project directory.
 
 ## Usage
 
