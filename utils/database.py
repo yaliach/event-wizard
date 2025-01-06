@@ -22,10 +22,10 @@ class DatabaseManager(QObject):
         try:
             self.conn = sqlite3.connect(self.db_path)
             self.cursor = self.conn.cursor()
+            return self.conn
         except sqlite3.Error as e:
             self.error_occurred.emit(f"Database connection error: {str(e)}")
             raise
-
     def close_connection(self):
         """Close database connection"""
         if self.conn:
