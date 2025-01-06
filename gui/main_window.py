@@ -1,14 +1,14 @@
+import sqlite3
 from PyQt5.QtWidgets import (QMainWindow, QTableView, QVBoxLayout, QHBoxLayout,
-                             QWidget, QPushButton, QLabel, QLineEdit, QFileDialog,
-                             QCheckBox, QListWidget, QProgressBar, QMessageBox,
-                             QStatusBar)
+                            QWidget, QPushButton, QLabel, QLineEdit, QFileDialog,
+                            QCheckBox, QListWidget, QProgressBar, QMessageBox,
+                            QStatusBar, QApplication)
 from PyQt5.QtCore import Qt, QSortFilterProxyModel
 from PyQt5.QtGui import QStandardItemModel, QStandardItem, QKeySequence
 import os
 from utils.database import DatabaseManager
 from utils.log_parser import LogParser
 from gui.dialogs import DetailedLogDialog
-
 
 class LogViewer(QMainWindow):
     def __init__(self):
@@ -179,18 +179,6 @@ class LogViewer(QMainWindow):
         # Start worker
         worker.start()
 
-    def handle_parsing_finished(self, success, message, msg_box):
-        if success:
-            msg_box.setText("Parsing completed successfully!")
-            msg_box.setStandardButtons(QMessageBox.Ok)
-            output_file = self.log_parser.get_output_file_path(message)
-            if output_file:
-                self.load_csv(output_file)
-        else:
-            msg_box.setText(f"Error during parsing: {message}")
-            msg_box.setStandardButtons(QMessageBox.Ok)
-        self.status_bar.showMessage("Parsing completed")
-
     def show_operation_status(self, message):
         """Show the initial status dialog"""
         if not self.operation_status_dialog:
@@ -218,6 +206,7 @@ class LogViewer(QMainWindow):
         else:
             msg_box.setText(f"Error during parsing: {message}")
             msg_box.setStandardButtons(QMessageBox.Ok)
+        self.status_bar.showMessage("Parsing completed")
 
     def load_csv(self, file_path=None):
         if not file_path:
@@ -226,7 +215,7 @@ class LogViewer(QMainWindow):
             try:
                 self.load_progress.show()
                 self.fields = self.db_manager.load_csv(file_path)
-                self.display_data()
+                self.run_query()
             except Exception as e:
                 self.show_error_message(f"Error loading file: {str(e)}")
             finally:
@@ -234,44 +223,88 @@ class LogViewer(QMainWindow):
 
     def drop_database(self):
         try:
+            # Drop the database
             self.db_manager.drop_database()
+
+            # Reset all variables
+            self.fields = []
+            self.current_page = 1
+            self.total_rows = 0
+            self.current_sort_column = None
+            self.current_sort_order = Qt.AscendingOrder
+            self.column_states = {}
+
+            # Clear the model
             self.model.clear()
-            self.setup_variables()
-            self.show_status_message("Database dropped successfully")
+            self.model.setHorizontalHeaderLabels([])  # Clear headers
+
+            # Reset search bar
+            self.search_bar.clear()
+
+            # Reset progress bars
+            self.search_progress.setValue(0)
+            self.load_progress.hide()
+
+            # Update UI
+            self.update_pagination_controls()
+            self.status_bar.showMessage("Database dropped successfully")
+
+            # Clear saved searches if you want to (optional)
+            self.saved_searches_list.clear()
+
         except Exception as e:
             self.show_error_message(f"Error dropping database: {str(e)}")
 
-    def run_query(self):
-        query = self.search_bar.text() or "SELECT * FROM logs"
-        try:
-            self.total_rows = self.db_manager.get_total_rows(query)
-            self.current_page = 1
-            self.display_data(query)
-        except Exception as e:
-            self.show_error_message(f"Query error: {str(e)}")
+    def run_query(self, query=None):
+        if not query:
+            query = self.search_bar.text()
+        if not query:
+            query = "SELECT * FROM logs"
 
-    def display_data(self, query="SELECT * FROM logs"):
-        try:
-            data = self.db_manager.get_paginated_data(query, self.current_page, self.rows_per_page)
-            self.update_model(data)
-            self.update_pagination_controls()
-        except Exception as e:
-            self.show_error_message(f"Error displaying data: {str(e)}")
+        if hasattr(self.db_manager, 'conn'):
+            try:
+                cursor = self.db_manager.conn.cursor()
 
-    def update_model(self, data):
-        self.model.clear()
-        if self.fields:
-            self.model.setHorizontalHeaderLabels(self.fields)
+                # Apply sorting if a column is selected
+                if self.current_sort_column is not None:
+                    sort_order = "ASC" if self.current_sort_order == Qt.AscendingOrder else "DESC"
+                    query = f"SELECT * FROM ({query}) ORDER BY [{self.fields[self.current_sort_column]}] {sort_order}"
 
-        for row_data in data:
-            row_items = [QStandardItem(str(item)) for item in row_data]
-            self.model.appendRow(row_items)
+                # Get total count
+                count_query = f"SELECT COUNT(*) FROM ({query})"
+                cursor.execute(count_query)
+                self.total_rows = cursor.fetchone()[0]
 
-    def update_pagination_controls(self):
-        total_pages = (self.total_rows - 1) // self.rows_per_page + 1
-        self.page_label.setText(f'Page {self.current_page} of {total_pages}')
-        self.prev_page_button.setEnabled(self.current_page > 1)
-        self.next_page_button.setEnabled(self.current_page < total_pages)
+                # Execute query with LIMIT and OFFSET for pagination
+                paginated_query = f"{query} LIMIT {self.rows_per_page} OFFSET {(self.current_page - 1) * self.rows_per_page}"
+                cursor.execute(paginated_query)
+                result = cursor.fetchall()
+
+                column_names = [description[0] for description in cursor.description]
+
+                self.model.clear()
+                self.model.setHorizontalHeaderLabels(column_names)
+
+                self.search_progress.setValue(0)
+                total_rows = len(result)
+
+                for row_idx, row_data in enumerate(result):
+                    row_items = [QStandardItem(str(item)) for item in row_data]
+                    self.model.appendRow(row_items)
+
+                    # Update progress every 10 rows
+                    if row_idx % 10 == 0 or row_idx == total_rows - 1:
+                        progress = int((row_idx + 1) / total_rows * 100)
+                        self.search_progress.setValue(progress)
+                        QApplication.processEvents()  # Allow GUI to update
+
+                self.search_progress.setValue(100)
+                self.update_pagination_controls()
+                self.restore_column_states()
+            except sqlite3.Error as e:
+                self.show_error_message(f"An error occurred while executing the query: {str(e)}")
+        else:
+            self.show_error_message("Please load a CSV file before running a query.")
 
     def show_detailed_log(self, index):
         source_index = self.proxy_model.mapToSource(index)
@@ -325,13 +358,13 @@ class LogViewer(QMainWindow):
     def prev_page(self):
         if self.current_page > 1:
             self.current_page -= 1
-            self.display_data()
+            self.run_query()
 
     def next_page(self):
         total_pages = (self.total_rows - 1) // self.rows_per_page + 1
         if self.current_page < total_pages:
             self.current_page += 1
-            self.display_data()
+            self.run_query()
 
     def on_header_clicked(self, logical_index):
         if self.current_sort_column == logical_index:
@@ -341,4 +374,19 @@ class LogViewer(QMainWindow):
             self.current_sort_order = Qt.AscendingOrder
 
         self.table.horizontalHeader().setSortIndicator(self.current_sort_column, self.current_sort_order)
-        self.display_data()
+        self.run_query()
+
+    def restore_column_states(self):
+        if self.column_states:
+            header = self.table.horizontalHeader()
+            for visual, logical in enumerate(self.column_states['order']):
+                header.moveSection(header.visualIndex(logical), visual)
+            for i, width in enumerate(self.column_states['widths']):
+                header.resizeSection(i, width)
+
+    def update_pagination_controls(self):
+        """Update pagination controls based on current page and total rows"""
+        total_pages = (self.total_rows - 1) // self.rows_per_page + 1
+        self.page_label.setText(f'Page {self.current_page} of {total_pages}')
+        self.prev_page_button.setEnabled(self.current_page > 1)
+        self.next_page_button.setEnabled(self.current_page < total_pages)
