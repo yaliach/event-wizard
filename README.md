@@ -75,11 +75,6 @@ python main.py
    - Check input logs are not corrupted
    - Ensure sufficient disk space
 
-3. **Performance Issues:**
-   - Limit complex queries on large datasets
-   - Use specific WHERE clauses
-   - Consider indexing frequently queried columns
-
 
 ## License 📄
 
