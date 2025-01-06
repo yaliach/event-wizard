@@ -12,13 +12,13 @@ Event Wizard is a Python-based GUI application designed for parsing and analyzin
 - Detailed log entry view
 - Column sorting and rearrangement
 
-## Prerequisites 📋
+## Prerequisite
 
 - Python 3.8 or higher
 - EvtxECmd.exe (from Eric Zimmerman's tools)
 - Windows operating system
 
-## Installation 🔧
+## Installation
 
 1. Clone the repository:
 ```bash
@@ -33,7 +33,7 @@ pip install -r requirements.txt
 
 3. Download EvtxECmd.exe from [Eric Zimmerman's Tools](https://ericzimmerman.github.io/#!index.md) and place it in the project directory
 
-## Usage 💻
+## Usage
 
 1. Start the application:
 ```bash
@@ -64,7 +64,7 @@ python main.py
    - Sort columns by dragging them
 
 
-## Troubleshooting 🔧
+## Troubleshooting
 
 1. **Database Issues:**
    - Use "Drop DB" button to reset the database
@@ -85,7 +85,7 @@ python main.py
 
 MIT License - see LICENSE file for details
 
-## Acknowledgments 🙏
+## Acknowledgments 
 
 - Eric Zimmerman for EvtxECmd
 - PyQt team for the GUI framework
