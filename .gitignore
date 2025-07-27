@@ -1,4 +1,5 @@
 **/__pycache__/
+/__pycache__/
 gui/__pycache__/
 gui/build/
 gui/dist/
